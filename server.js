@@ -69,4 +69,4 @@ const server = http.createServer(async (req, res) => {
     return error(res, "Erro interno.", 500);
   }
 });
-server.listen(Number(PORT), "127.0.0.1", () => console.log(`Pousada Vento Leste: http://localhost:${PORT}`));
+server.listen(Number(PORT), "0.0.0.0", () => console.log(`Pousada Vento Leste: http://localhost:${PORT}`));
