@@ -47,3 +47,17 @@ O servidor encaminha a solicitação ao serviço, que verifica a capacidade e a 
 com reservas existentes consultando o repositório. A validação e a gravação ocorrem na
 mesma transação para impedir que duas solicitações concorrentes reservem o mesmo quarto
 no mesmo período.
+
+## Interface renovada
+
+A página inicial oferece acesso demonstrativo: qualquer e-mail válido e senha abrem o painel. Não há autenticação, validação de credenciais ou proteção de endpoints. A senha não é armazenada nem enviada. Autenticação real requer implementação no servidor.
+
+A interface inclui temas claro/escuro com preferência local, busca de quartos e hóspedes, próximas chegadas ordenadas e ocupação semanal prevista. A ocupação usa quartos distintos reservados em cada noite, considerando entrada inclusiva e saída exclusiva, sobre os quartos atualmente cadastrados. Não representa check-in realizado ou pagamentos.
+
+### Validação desta entrega
+
+- Build de produção executado com sucesso.
+- Playwright com Edge: entrada demonstrativa; criação, edição e exclusão de quarto e reserva usando API real e banco SQLite temporário separado; estado vazio e falha de API; ausência de erros JavaScript.
+- Capturas reais em `screenshots/`: login desktop, dashboard claro/escuro e larguras 360/768/1440. Os registros QA nas capturas pertencem exclusivamente ao banco isolado.
+- Verificação de fórmulas: `node --test tests/metrics.test.mjs`.
+- Backend, contratos e armazenamento original preservados. A revisão não incluiu uma auditoria completa de acessibilidade.

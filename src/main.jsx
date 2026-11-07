@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+import { Wind, LayoutDashboard, BedDouble, CalendarDays, Sun, Moon, LogOut, Menu, Plus, Search } from 'lucide-react';
+import { Welcome, useTheme } from './welcome.jsx';
+import { Occupancy } from './occupancy.jsx';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const formatDate = (value) => value.split('-').reverse().join('/');
 const statuses = ['Disponível', 'Ocupado', 'Manutenção'];
 const pages = {
-  dashboard: ['▦', 'Dashboard', 'VISÃO GERAL', 'Bem-vindo ao painel de gestão da pousada.'],
-  quartos: ['▤', 'Quartos', 'ACOMODAÇÕES', 'Consulte e gerencie os quartos da pousada.'],
-  reservas: ['▣', 'Reservas', 'HOSPEDAGENS', 'Gerencie as reservas e os dados dos hóspedes.']
+  dashboard: [LayoutDashboard, 'Dashboard', 'VISÃO GERAL', 'Bem-vindo ao painel de gestão da pousada.'],
+  quartos: [BedDouble, 'Quartos', 'ACOMODAÇÕES', 'Consulte e gerencie os quartos da pousada.'],
+  reservas: [CalendarDays, 'Reservas', 'HOSPEDAGENS', 'Gerencie as reservas e os dados dos hóspedes.']
 };
 
 async function api(resource, method = 'GET', data) {
@@ -24,7 +27,7 @@ async function api(resource, method = 'GET', data) {
 
 function Table({ columns, rows, empty }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex="0" role="region" aria-label="Tabela de registros. Em telas pequenas, role horizontalmente para ver todas as colunas.">
       <table>
         <thead><tr>{columns.map((column) => <th key={column} scope="col">{column}</th>)}</tr></thead>
         <tbody>
@@ -43,6 +46,20 @@ function Badge({ status }) {
 }
 
 function Editor({ entity, record, rooms, close, save }) {
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    const trigger = document.activeElement;
+    const dialog = dialogRef.current;
+    const trap = (event) => {
+      if (event.key !== 'Tab') return;
+      const items = [...dialog.querySelectorAll('button:not(:disabled), input, select, textarea')];
+      const first = items[0], last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    dialog.addEventListener('keydown', trap);
+    return () => { dialog.removeEventListener('keydown', trap); trigger?.focus(); };
+  }, []);
   const isRoom = entity === 'quartos';
   const [form, setForm] = useState(record || (isRoom
     ? { status: 'Disponível' }
@@ -79,7 +96,7 @@ function Editor({ entity, record, rooms, close, save }) {
     }} onKeyDown={(event) => {
       if (event.key === 'Escape' && !busy) close();
     }}>
-      <form className={'modal' + (isRoom ? '' : ' wide')} role="dialog" aria-modal="true"
+      <form ref={dialogRef} className={'modal' + (isRoom ? '' : ' wide')} role="dialog" aria-modal="true"
         aria-labelledby="editor-title" onSubmit={submit}>
         <div className="modal-head">
           <div><span className="eyebrow">{pages[entity][2]}</span><h2 id="editor-title">{title}</h2></div>
@@ -126,6 +143,11 @@ function Editor({ entity, record, rooms, close, save }) {
 }
 
 function App() {
+  const [entered, setEntered] = useState(false);
+  const [theme, toggleTheme] = useTheme();
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [page, setPage] = useState('dashboard');
   const [menu, setMenu] = useState(false);
   const [data, setData] = useState({ quartos: [], reservas: [] });
@@ -137,15 +159,17 @@ function App() {
   const { quartos: rooms, reservas: reservations } = data;
 
   async function load() {
+    setLoading(true);
+    setLoadError('');
     try {
       const [quartos, reservas] = await Promise.all([api('quartos'), api('reservas')]);
       setData({ quartos, reservas });
     } catch (error) {
-      setNotice({ text: error.message, error: true });
-    }
+      setLoadError(error.message);
+    } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (entered) load(); }, [entered]);
   useEffect(() => {
     if (!notice || notice.error) return;
     const timer = setTimeout(() => setNotice(null), 3500);
@@ -153,6 +177,7 @@ function App() {
   }, [notice]);
 
   function navigate(nextPage) {
+    setSearch('');
     setPage(nextPage);
     setMenu(false);
   }
@@ -193,27 +218,29 @@ function App() {
   const occupied = new Set(reservations.filter((r) => r.entrada <= today && r.saida > today).map((r) => r.quartoId));
   const roomStatus = (room) => occupied.has(room.id) ? 'Ocupado' : room.status;
   const roomName = (id) => rooms.find((room) => room.id === id)?.nome || '—';
-  const visibleRooms = rooms.filter((room) => roomStatusFilter === 'Todos' || roomStatus(room) === roomStatusFilter);
-  const visibleReservations = reservations.filter((r) => !reservationRoomFilter || r.quartoId === Number(reservationRoomFilter));
-  const upcoming = reservations.filter((r) => r.entrada >= today).slice(0, 5);
+  const visibleRooms = rooms.filter((room) => (roomStatusFilter === 'Todos' || roomStatus(room) === roomStatusFilter) && (room.nome + ' ' + (room.descricao || '')).toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
+  const visibleReservations = reservations.filter((r) => (!reservationRoomFilter || r.quartoId === Number(reservationRoomFilter)) && r.hospede.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
+  const upcoming = reservations.filter((r) => r.entrada >= today).sort((a,b) => a.entrada.localeCompare(b.entrada)).slice(0, 5);
   const [, title, eyebrow, subtitle] = pages[page];
+
+  if (!entered) return <Welcome enter={() => setEntered(true)} theme={theme} toggleTheme={toggleTheme} />;
 
   return (
     <>
       <header className="topbar">
-        <button className="mobile-menu" aria-label="Alternar menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>☰</button>
-        <div className="brand-mark">✦</div><strong>Pousada Vento Leste</strong><span className="top-caption">Painel de gestão</span>
+        <button className="mobile-menu" aria-label="Alternar menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Menu size={20} /></button>
+        <div className="brand-mark"><Wind size={22} /></div><strong>Pousada Vento Leste</strong><span className="top-caption">HOSPITALIDADE EM CADA DETALHE</span><div className="top-tools"><button className="icon-button" onClick={toggleTheme} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}>{theme === "dark" ? <Sun size={20}/> : <Moon size={20}/>}</button><span className="avatar">VL</span></div>
       </header>
       <div className="app-shell">
         <aside className={'sidebar' + (menu ? ' open' : '')}>
           <p className="side-label">MENU PRINCIPAL</p>
-          {Object.entries(pages).map(([key, [icon, label]]) => (
+          {Object.entries(pages).map(([key, [Icon, label]]) => (
             <button key={key} className={'nav-link' + (page === key ? ' active' : '')}
               aria-current={page === key ? 'page' : undefined} onClick={() => navigate(key)}>
-              <span>{icon}</span> {label}
+              <Icon size={19} aria-hidden="true"/> {label}
             </button>
           ))}
-          <div className="side-bottom"><span className="avatar">VL</span><div><strong>Pousada Vento Leste</strong><small>Administração</small></div></div>
+          <div className="sidebar-note"><Wind size={26}/><p>Mais tempo para<br/>receber bem.</p><small>Seu dia a dia, mais leve.</small></div><button className="nav-link exit" onClick={() => { setEntered(false); setPage("dashboard"); }}><LogOut size={18}/> Sair do painel</button><div className="side-bottom"><span className="avatar">VL</span><div><strong>Pousada Vento Leste</strong><small>Administração</small></div></div>
         </aside>
         <main className="main">
           <section className="page active">
@@ -221,20 +248,22 @@ function App() {
               <div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div>
               {page !== 'dashboard' && (
                 <button className="btn" onClick={() => setEditor({ entity: page })} disabled={deleting || (page === 'reservas' && !rooms.length)}>
-                  {page === 'quartos' ? '＋ Cadastrar quarto' : '＋ Nova reserva'}
+                  <Plus size={17}/>{page === 'quartos' ? 'Cadastrar quarto' : 'Nova reserva'}
                 </button>
               )}
             </div>
+            {loading ? <div className="state-panel" role="status">Carregando os dados da pousada…</div> : loadError ? <div className="state-panel" role="alert"><h2>Não foi possível carregar os dados</h2><p>{loadError}</p><button className="btn" onClick={load}>Tentar novamente</button></div> : <>
             {page === 'dashboard' && <>
+              <div className="welcome-banner"><div><span className="eyebrow">CUIDAR COMEÇA POR AQUI</span><h2>Boas estadias começam<br/>com uma gestão tranquila.</h2><p>Acompanhe sua pousada e prepare as próximas boas-vindas.</p><button className="btn" disabled={!rooms.length} onClick={() => setEditor({entity: 'reservas'})}><Plus size={17}/> Nova reserva</button></div><Wind className="banner-wind" aria-hidden="true"/></div>
               <div className="stats">
                 {[
                   ['Total de quartos', rooms.length, 'Quartos cadastrados'],
-                  ['Ocupados', rooms.filter((room) => roomStatus(room) === 'Ocupado').length, 'Ocupação atual'],
-                  ['Disponíveis', rooms.filter((room) => roomStatus(room) === 'Disponível').length, 'Disponíveis hoje'],
+                  ['Ocupação prevista', occupied.size, 'Quartos com reserva hoje'],
+                  ['Em manutenção', rooms.filter((room) => room.status === 'Manutenção').length, 'Situação cadastrada'],
                   ['Reservas', reservations.length, 'Reservas cadastradas']
                 ].map(([label, value, caption]) => <article key={label} className="stat"><span>{label}</span><strong>{value}</strong><small>{caption}</small></article>)}
               </div>
-              <div className="panel dashboard-panel">
+              <Occupancy rooms={rooms} reservations={reservations} today={today}/><div className="panel dashboard-panel">
                 <div className="panel-heading">
                   <div><h2>Próximas chegadas</h2><p>Reservas com entrada a partir de hoje</p></div>
                   <button className="btn" onClick={() => navigate('reservas')}>Ver reservas</button>
@@ -242,10 +271,11 @@ function App() {
                 <Table columns={['Hóspede', 'Quarto', 'Entrada', 'Saída', 'Situação']} empty="Nenhuma chegada prevista."
                   rows={upcoming.map((r) => ({ id: r.id, cells: [
                     r.hospede, roomName(r.quartoId), formatDate(r.entrada), formatDate(r.saida),
-                    <Badge status={r.entrada === today ? 'Ocupado' : 'Reservado'} />
+                    <Badge status={r.entrada === today ? 'Chegada hoje' : 'Prevista'} />
                   ] }))} />
               </div>
             </>}
+            {page !== 'dashboard' && <label className="search-box"><Search size={18}/><input aria-label={page === 'quartos' ? 'Buscar quartos' : 'Buscar hóspede'} placeholder={page === 'quartos' ? 'Buscar por quarto ou descrição…' : 'Buscar pelo nome do hóspede…'} value={search} onChange={e => setSearch(e.target.value)}/></label>}
             {page === 'quartos' && <>
               <div className="toolbar">
                 <div className="filters">
@@ -283,6 +313,8 @@ function App() {
                   ] }))} />
               </div>
             </>}
+            </>}
+            <footer className="page-footer">POUSADA VENTO LESTE <span>Feito para acolher. Pensado para simplificar.</span></footer>
           </section>
         </main>
       </div>
