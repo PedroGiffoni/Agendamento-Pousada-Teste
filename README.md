@@ -61,3 +61,10 @@ A interface inclui temas claro/escuro com preferência local, busca de quartos e
 - Capturas reais em `screenshots/`: login desktop, dashboard claro/escuro e larguras 360/768/1440. Os registros QA nas capturas pertencem exclusivamente ao banco isolado.
 - Verificação de fórmulas: `node --test tests/metrics.test.mjs`.
 - Backend, contratos e armazenamento original preservados. A revisão não incluiu uma auditoria completa de acessibilidade.
+
+## Demonstração online
+
+- Render: API Node 24 e interface, build `npm ci && npm run build`, inicialização `node server.js`.
+- Vercel: interface Vite com `/api/*` encaminhado ao serviço Render por `vercel.json`.
+- Render Free usa disco efêmero: o SQLite é perdido após reinícios, redeploys ou suspensão. Esta publicação é demonstrativa; para guardar cadastros, configurar persistência antes de uso real.
+- O login continua demonstrativo e os endpoints são públicos.
